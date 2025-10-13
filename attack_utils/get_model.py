@@ -1,8 +1,8 @@
 import os
 import sys
 sys.path.append(os.path.join('networks'))
-from networks.CosFace import CosFace, CosFace1
-from networks.SphereFace import SphereFace, SphereFace1
+# from networks.CosFace import CosFace, CosFace1
+# from networks.SphereFace import SphereFace, SphereFace1
 from networks.ArcFace import ArcFace, ArcFace1
 
 
@@ -17,13 +17,13 @@ def getmodel(face_model, **kwargs):
 		a model class
 	"""
 	img_shape = (112, 112)
-	if face_model == 'CosFace':
-		model = CosFace1(**kwargs)
-		img_shape = (112, 96)
-	elif face_model == 'SphereFace':
-		model = SphereFace1(**kwargs)
-		img_shape = (112, 96)
-	elif face_model == 'ArcFace':
+	# if face_model == 'CosFace':
+	#	model = CosFace1(**kwargs)
+	#	img_shape = (112, 96)
+	# elif face_model == 'SphereFace':
+	#	model = SphereFace1(**kwargs)
+	#	img_shape = (112, 96)
+	if face_model == 'ArcFace':
 		model = ArcFace1()
 	else:
 		raise Exception

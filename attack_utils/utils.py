@@ -51,12 +51,12 @@ def sample_images_per_class(people_adv_txt):
         # sample image_gen
         for idx in range(1,num):
             if idx < 9:
-                images_gen.append(name + '_000'+ str(idx+1)+'.jpg')
+                images_gen.append(name + '_000'+ str(idx+1)+'.png')
             elif idx < 99:
-                images_gen.append(name + '_00'+ str(idx+1)+'.jpg')
+                images_gen.append(name + '_00'+ str(idx+1)+'.png')
             else:
-                images_gen.append(name + '_0'+ str(idx+1)+'.jpg')
-            images_ref.append(name + '_000'+ str(1)+'.jpg')
+                images_gen.append(name + '_0'+ str(idx+1)+'.png')
+            images_ref.append(name + '_000'+ str(1)+'.png')
             people_name.append(name)
     
     return people_name, images_gen, images_ref
@@ -85,7 +85,7 @@ def sample_images_per_class_tmp(people_adv_txt):
         name = splits[0]
         num =  int(splits[1])
         # sample image_gen
-        images_gen.append(name + '_000'+ str(1)+'.jpg')
+        images_gen.append(name + '_000'+ str(1)+'.png')
         people_name.append(name)
     
     return people_name, images_gen
@@ -113,14 +113,14 @@ def sample_images(people_adv_txt, num_total = 1680, num = 10):
         splits = line.split()
         name = splits[0]
         num =  int(splits[1])
-        images_ref.append(name + '_000'+ str(1)+'.jpg')
+        images_ref.append(name + '_000'+ str(1)+'.png')
         people_name.append(name)
         # randomly sample image_gen
         idx = random.randint(1, num-1)
         if idx < 9:
-            images_gen.append(name + '_000'+ str(idx+1)+'.jpg')
+            images_gen.append(name + '_000'+ str(idx+1)+'.png')
         else:
-            images_gen.append(name + '_00'+ str(idx+1)+'.jpg')
+            images_gen.append(name + '_00'+ str(idx+1)+'.png')
     
     return people_name, images_gen, images_ref
 
@@ -181,6 +181,18 @@ def load_list_images_resize(image_list, people_list, file_path, img_shape):
     imgs = []
     for img_path in imgs_path:
         img = cv2.imread(img_path)
+        if img is None:
+            # Try alternate extension swap between .jpg and .png
+            alt_path = None
+            if img_path.lower().endswith('.jpg'):
+                alt_path = img_path[:-4] + '.png'
+            elif img_path.lower().endswith('.png'):
+                alt_path = img_path[:-4] + '.jpg'
+            if alt_path is not None and os.path.exists(alt_path):
+                img = cv2.imread(alt_path)
+            if img is None:
+                print(f"Warning: Could not read image {img_path}, skipping.")
+                continue
         cropped_img = cv2.resize(img, (img_shape[1], img_shape[0]))
         imgs.append(cropped_img)
     images = np.array(imgs) # (b,H,W,C)numpy.array
@@ -205,9 +217,17 @@ def make_dir_name(atk_model, atk):
     dir_name = atk_model
     pass_list = ['device', 'attack_mode', 'return_type', 'random_start', 'gain', 'kernel_name', 'len_kernel', 'nsig', 'stacked_kernel']
     for i in range(1, len(atk_attrs)):
-        splits = atk_attrs[i].split('=')
-        pram_key = splits[0]
-        pram_value = splits[1].split(',')[0]
+        token = atk_attrs[i]
+        if '=' not in token:
+            # skip tokens that are not key=value (e.g., class names or punctuation)
+            continue
+        pram_key, pram_value_raw = token.split('=', 1)
+        # take first segment before comma and strip trailing punctuation
+        pram_value = pram_value_raw.split(',')[0].rstrip(')>]}')
+        # also strip any leading punctuation/quotes
+        pram_value = pram_value.lstrip('([{\'\"')
+        
+        
         if pram_key in pass_list:
             continue
         else:
@@ -239,16 +259,25 @@ def align_images(images, mtcnn, img_shape):
     align_images = np.array(align_images) # (b,H,W,C)numpy.array
     return align_images, M
 
-def align_images_facenet(images, mtcnn):
+def align_images_facenet(images, mtcnn, img_shape):
     # using facenet_pytorch.MTCNN as mtcnn
     # input image list to align images with mtcnn
     # output numpy.array (b,H,W,C) aligned images
     align_images = []
 
     for i in range(images.shape[0]):
-        align_img = mtcnn(images[i]).permute(1,2,0) # 用MTCNN人脸对齐，(H,W,C)torch.tensor
-        align_img = align_img.numpy().astype(np.uint8) # (H,W,C)numpy.array
-        align_images.append(align_img)
+        pil_img = Image.fromarray(cv2.cvtColor(images[i], cv2.COLOR_BGR2RGB))
+        aligned = mtcnn(pil_img)
+        if aligned is not None:
+            align_img = mtcnn(pil_img).permute(1,2,0) # 用MTCNN人脸对齐，(H,W,C)torch.tensor
+            align_img = align_img.numpy().astype(np.uint8) # (H,W,C)numpy.array
+            align_images.append(align_img)
+        else:
+            align_images.append(cv2.resize(images[i], img_shape))
+
+        # align_img = mtcnn(images[i]).permute(1,2,0) # 用MTCNN人脸对齐，(H,W,C)torch.tensor
+        # align_img = align_img.numpy().astype(np.uint8) # (H,W,C)numpy.array
+        # align_images.append(align_img)
 
     align_images = np.array(align_images) # (b,H,W,C)numpy.array
     return align_images
@@ -297,8 +326,12 @@ def save_adv_image(image, img_name, output_dir):#保存图片
         # print('saving ', img_name)
     elif img_name.endswith('.jpg'):
         img_name = img_name.split('.jpg')[0]
-        cv2.imwrite(os.path.join(output_dir, img_name+'.png'), image.astype(np.uint8))
-        # print('saving ', img_name+'.png')
+        success = cv2.imwrite(os.path.join(output_dir, img_name+'.png'), image.astype(np.uint8))
+        if success == True:
+            print('saving ', img_name+'.png to ' + output_dir)
+        else:
+            print('saving image not successful')
+
     return os.path.join(output_dir, img_name)
 
 def save_adv_image_resize(image, img_name, output_dir, resize=(250, 250)):#保存图片

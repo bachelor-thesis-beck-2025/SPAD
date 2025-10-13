@@ -13,8 +13,9 @@ import os
 
 class Flatten(Module):
     def forward(self, input):
-        return input.view(input.size(0), -1)
-
+        # return input.view(input.size(0), -1)
+        # Use reshape to handle non-contiguous tensors safely
+        return input.reshape(input.size(0), -1)
 
 def l2_norm(input, axis=1):
     norm = torch.norm(input, 2, axis, True)
@@ -261,7 +262,7 @@ class ArcFace1(Module):
         output = net
 
         if not no_gpu:
-            # output = net.cuda()
+            output = net.cuda()
             output = nn.DataParallel(net)
             input_device = torch.device("cuda")
         else:

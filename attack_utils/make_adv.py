@@ -1,20 +1,22 @@
 import torch
 import numpy as np
 import sys
+import os
+# Add the parent directory to Python path to find torchattacks
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from facenet_pytorch import MTCNN, InceptionResnetV1
 import cv2
-import os
 from align_methods import align, re_align
 from get_model import getmodel
 from torch.nn import DataParallel
 from PIL import Image
 from torch import Tensor
 import torchvision
-import torchattacks_wq as torchattacks
+import torchattacks
 from torch import nn
 from torchvision import transforms
 import random
-from utils_wq import *
+from attack_utils.utils import *
 import time
 from tqdm import tqdm
 import argparse
@@ -56,10 +58,10 @@ def get_atk_method(atk_method, model, params):
     FGSM, BIM, RFGSM, PGD, MIFGSM(MIM), DIFGSM(DIM), TIFGSM(TIM)
     eps = 8-18
     '''
+    std = params.get('std', 0.1)
     if 'eps' in params: eps = params['eps']
     if 'alpha' in params: alpha = params['alpha']
     if 'steps' in params: steps = params['steps']
-    if 'std' in params: std = params['std']
     if 'gamma' in params: gamma = params['gamma']
 
     if atk_method == 'FGSM':
@@ -86,8 +88,8 @@ def get_atk_method(atk_method, model, params):
         atk = torchattacks.DIFGSM_face(model, eps=eps, alpha=alpha, steps=steps)
     elif atk_method == 'TIFGSM':
         atk = torchattacks.TIFGSM_face(model, eps=eps, alpha=alpha, steps=steps)
-    elif atk_method == 'TIPIM': # targeted only
-        atk = torchattacks.TIPIM_face(model, eps = eps, gamma = gamma, steps = steps, norm = 'l2', gain = 'gain3')
+    # elif atk_method == 'TIPIM': # targeted only
+    #     atk = torchattacks.TIPIM_face(model, eps = eps, gamma = gamma, steps = steps, norm = 'l2', gain = 'gain3')
     else:
         raise Exception
     return atk
@@ -205,10 +207,14 @@ def run_lfw(model_name, atk_method, dataset_name, num_total, num, batch_size, ba
 
     total = len(people_name)
 
+    print("Total images to process:", total)
+
     if int(total%batch_size) == 0:
         epoch = int(total/batch_size)
     else:
         epoch = int(total/batch_size)+1
+    print("Epochs:", epoch)
+    print("First few image paths:", images_gen[:5])
     
     if targets_dir != '':
         # 读取目标图片地址, 每个identity有3个references
@@ -221,6 +227,7 @@ def run_lfw(model_name, atk_method, dataset_name, num_total, num, batch_size, ba
         # print('turn ', i)
         l = i * batch_size
         r = min((i + 1) * batch_size, total)
+        print(f"Processing batch {i+1}/{epoch}")
         images_gen_i= images_gen[l : r]
         people_name_i = people_name[l : r]
         images_ref_i = images_ref[l : r]
@@ -228,6 +235,7 @@ def run_lfw(model_name, atk_method, dataset_name, num_total, num, batch_size, ba
         # 读取原图片
         # origin_images, _ = load_list_images(images_gen_i, people_name_i, base_data_root,) # origin_images (b,H,W,C) numpy.array
         origin_images, _ = load_list_images_resize(images_gen_i, people_name_i, base_data_root, img_shape) # origin_images (b,H,W,C) numpy.array
+        print("Loaded images shape:", origin_images.shape)
 
         #获取图片名
         origin_names = images_gen_i
@@ -250,7 +258,18 @@ def run_lfw(model_name, atk_method, dataset_name, num_total, num, batch_size, ba
             align_tar_images = tar_images
             #构造labels
             align_lab_images = make_inputs(align_tar_images)
-        labels = model(align_lab_images.cuda())
+        # Ensure input and label batch sizes match and are non-zero
+        batch_len = min(input_images.shape[0], align_lab_images.shape[0])
+        if batch_len == 0:
+            print("Warning: empty batch after filtering, skipping.")
+            continue
+        if input_images.shape[0] != batch_len or align_lab_images.shape[0] != batch_len:
+            input_images = input_images[:batch_len]
+            align_lab_images = align_lab_images[:batch_len]
+
+        print("Computing label embeddings...")
+        labels = model(align_lab_images.cuda(non_blocking=True))
+        print("Label embeddings computed.")
 
         # attack
         adv_images = atk(input_images, labels) # (b,C,H,W) torch.tensor
@@ -258,10 +277,11 @@ def run_lfw(model_name, atk_method, dataset_name, num_total, num, batch_size, ba
 
         if save_img:
             # save image
+            print(f"Saving {len(adv_images)} adversarial images to {dataset_root}")
             for i in range(len(adv_images)):
                 _ = save_adv_image(adv_images[i], sub_root+'-'+origin_names[i], dataset_root)
         
-    print('Attack compete')
+    print('Attack complete')
 
 def load_images_list(image_list, img_shape):
     # input image_list and image file path and load image as numpy.array
@@ -274,6 +294,18 @@ def load_images_list(image_list, img_shape):
     imgs = []
     for img_path in image_list:
         img = cv2.imread(img_path)
+        if img is None:
+            # Try alternate extension swap between .jpg and .png
+            alt_path = None
+            if img_path.lower().endswith('.jpg'):
+                alt_path = img_path[:-4] + '.png'
+            elif img_path.lower().endswith('.png'):
+                alt_path = img_path[:-4] + '.jpg'
+            if alt_path is not None and os.path.exists(alt_path):
+                img = cv2.imread(alt_path)
+            if img is None:
+                # print(f"Warning: Could not read image {img_path}, skipping.")
+                continue
         cropped_img = cv2.resize(img, (img_shape[1], img_shape[0]))
         imgs.append(cropped_img)
     images = np.array(imgs) # (b,H,W,C)numpy.array
@@ -395,6 +427,77 @@ def run_normal_tmp(model_name, atk_method, dataset_name, batch_size, base_data_r
                 _ = save_adv_image(noise[i], sub_root+'-'+images_names[i], noise_root)
             
     print('Attack compete')
+
+
+def run_lfw_from_list(model_name, atk_method, dataset_name, batch_size, base_data_root, file_list, model, img_shape, params, save_img, adv_dataset_root, targets_dir, save_noise):
+
+    print('Attack dataset ', dataset_name)
+    atk = get_atk_method(atk_method, model, params)
+    print('Attack algorithm ', str(atk))
+
+    sub_root = make_dir_name(atk_method, atk)
+    dataset_root = os.path.join(adv_dataset_root, dataset_name, atk_method, model_name, sub_root)
+    if not os.path.exists(dataset_root):
+        os.makedirs(dataset_root)
+    print('save root: ', dataset_root)
+
+    # Read list of filenames relative to base_data_root
+    img_list = []
+    img_names = []
+    with open(file_list, 'r') as f:
+        for line in f.readlines():
+            rel = line.strip().split('\t')[0]
+            if not rel:
+                continue
+            full_path = os.path.join(base_data_root, rel)
+            img_list.append(full_path)
+            img_names.append(os.path.basename(rel))
+
+    total = len(img_list)
+    if int(total%batch_size) == 0:
+        epoch = int(total/batch_size)
+    else:
+        epoch = int(total/batch_size)+1
+    print('Nums of images', total)
+    # print("Epochs:", epoch) #
+    # print("First few image paths:", img_names[:5]) #
+
+    for i in tqdm(range(epoch)):
+        l = i * batch_size
+        r = min((i + 1) * batch_size, total)
+
+        batch_paths = img_list[l:r]
+        batch_names = img_names[l:r]
+
+        # Load and resize originals
+        origin_images = load_images_list(batch_paths, img_shape)
+        align_ori_images = origin_images
+        input_images = make_inputs(align_ori_images)
+
+        # For untargeted attacks, labels aren't used; still compute embeddings on self to satisfy API
+        align_lab_images = input_images
+
+        batch_len = min(input_images.shape[0], align_lab_images.shape[0])
+        if batch_len == 0:
+            print('Warning: empty batch after filtering, skipping.')
+            continue
+        if input_images.shape[0] != batch_len or align_lab_images.shape[0] != batch_len:
+            input_images = input_images[:batch_len]
+            align_lab_images = align_lab_images[:batch_len]
+
+        # print('Computing label embeddings...')
+        labels = model(align_lab_images.cuda(non_blocking=True))
+        # print('Label embeddings computed.')
+
+        adv_images = atk(input_images, labels)  # untargeted by default
+        adv_images = adv_images.detach().permute(0, 2, 3, 1).cpu().numpy()
+
+        if save_img:
+            for j in range(len(adv_images)):
+                _ = save_adv_image(adv_images[j], sub_root + '-' + batch_names[j], dataset_root)
+
+    print('Attack complete')
+
 
 def run_normal_tmp1(model_name, atk_method, dataset_name, batch_size, base_data_root, txt_file, model, img_shape, params, save_img, adv_dataset_root, targets_dir, save_noise):
 
@@ -635,25 +738,28 @@ def align_faces():
 
     print('Align faces')
 
-    base_data_root = 'E:/Files/code/Dataset_Face/celeba-align'
-    dataset_root = 'E:/Files/code/Dataset_Face/celeba-align-112-112'
+    base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-SPAD'
+    dataset_root = '/mnt/md0/beck/datasets/lfw/lfw-aligned'
     batch_size = 100
     img_shape = (112, 112)
-    mtcnn = align
+    mtcnn = MTCNN(image_size=img_shape[0])
     save_img = True
     if not os.path.exists(dataset_root):
         os.makedirs(dataset_root) # 创建数据保存路径
 
-    # 抽取图像
-    img_list = os.listdir(base_data_root) # eg 000291.jpg
+    # Recursively collect all image files from base_data_root and subfolders
+    img_list = []
+    for root, dirs, files in os.walk(base_data_root):
+        for file in files:
+            if file.lower().endswith('.jpg'):
+                img_list.append(os.path.relpath(os.path.join(root, file), base_data_root))
     total = len(img_list)
     print('Nums of images', total)
 
     # total = min(total, 50000)
     print('Nums of images to align', total)
 
-    start_idx = 51440
-
+    start_idx = 0  # safer default
     remain_total = total - start_idx
 
     if int(remain_total%batch_size) == 0:
@@ -667,44 +773,54 @@ def align_faces():
 
         l = i * batch_size + start_idx
         r = min((i + 1) * batch_size + start_idx, total)
-        # 获取图片名
-        images_i= img_list[l : r]
-        # print(images_names)
+        images_i = img_list[l : r]
 
         # 读取原图片
         origin_images = []
         images_names = []
-        for img_name in images_i:
-            img_dir = os.path.join(base_data_root, img_name)
+        for rel_img_path in images_i:
+            img_dir = os.path.join(base_data_root, rel_img_path)
             img = cv2.imread(img_dir)
+            if img is None:
+                print(f"Warning: Could not read image {img_dir}, skipping.")
+                continue
+
             origin_images.append(img)
-            images_names.append(img_name)
+            images_names.append(rel_img_path)
+        # if not origin_images:
+        #     continue
+
         origin_images = np.array(origin_images) # origin_images (b,H,W,C) numpy.array
         # print('Origin 0-255 numpy images shape', origin_images.shape)
 
         # origin人脸对齐
-        align_ori_images, _ = align_images(origin_images, mtcnn, img_shape) # M保存的align信息
+        align_ori_images = align_images_facenet(origin_images, mtcnn, img_shape) # M保存的align信息
         # print('Aligned origin 0-255 numpy images shape', align_ori_images.shape)
 
+        save_img = True
         if save_img:
-            # save image
-            for i in range(len(align_ori_images)):
-                _ = save_adv_image(align_ori_images[i], images_names[i], dataset_root)
-        
-    print('align compete')
+            for j in range(len(align_ori_images)):
+                # print(images_names[j], dataset_root)
+                subfolder = os.path.dirname(images_names[j])
+                image = os.path.basename(images_names[j])
+                output = os.path.join(dataset_root, subfolder)
+                _ = save_adv_image(align_ori_images[j], image, output)
+            print('Aligned images saved to ' + dataset_root + '.')
+            
+    print('align complete')
 
 def input_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--cuda_id", type=int, default=0,
                         help="The GPU ID")
-    parser.add_argument("--people", type=str, default='E:/Files/code/Dataset_Face/lfw/people.txt',
+    parser.add_argument("--people", type=str, default='people.txt',
                         help="The people.txt path")
-    parser.add_argument("--people_adv", type=str, default='E:/Files/code/Dataset_Face/adv_face/align/people_adv.txt',
+    parser.add_argument("--people_adv", type=str, default='people_adv.txt',
                         help="The people_adv.txt path")
     parser.add_argument("--save_dir", type=str, default='./data',
                         help="data list save path")
-    parser.add_argument("--batch_size", type=str, default=20,
+    parser.add_argument("--batch_size", type=int, default=20,
                         help="training & validation batch size")
     parser.add_argument("--save_img", type=bool, default=True,
                         help="save images or not")
@@ -713,13 +829,15 @@ def input_args():
     parser.add_argument("--dataset", type=str, default='celeba-all', #'celebahq'
                         help="base dataset name")
     parser.add_argument("--frs", type=str, default='ArcFace', # 'CosFace', # 'E:/Files/code/Dataset_Face/deep_fake_detect/image/train/',
-                        help="face model ")
+                        help="face model")
     parser.add_argument("--targeted", type=bool, default=False,
                         help="calculate attack success rate or not")
     parser.add_argument("--save_noise", type=bool, default=False,
                         help="save noise mask")
-    parser.add_argument("--attack_list", type=str, default=['FGSM','BIM','PGD','RFGSM','MIFGSM','DIFGSM','TIFGSM','TIPIM'],
-                        help="face model ")
+    parser.add_argument("--attack_list", type=str, default=['GN'],  # ['FGSM','BIM','PGD','RFGSM','MIFGSM','DIFGSM','TIFGSM','FFGSM'],
+                        help="attack algorithm(s)")
+    parser.add_argument("--file_list", type=str, default='',
+                        help="Text file with image paths relative to base_data_root")
     return parser.parse_args()
 
 def main():
@@ -734,6 +852,7 @@ def main():
     targeted = args.targeted
     save_noise = args.save_noise
     attack_list = args.attack_list
+    file_list = args.file_list
     device = torch.device('cuda')
 
     num_total = 1680 # 数据集类别数，LFW1680
@@ -742,13 +861,15 @@ def main():
     # alphas = [1, 2, 3] # [0.5,1,1.5,2]
     # Steps = [5, 10, 20]
     
-    eps = [10] #[5,10,15] 
+    eps = [5] #[5,10,15]
     alphas = [1] #[1,2,3] 
-    Steps = [5] #[1,5,10]
+    Steps = [10] #[1,5,10]
     gamma = [0]
 
     if model_name == 'ArcFace' or model_name == 'CosFace' or model_name == 'SphereFace':
         model, img_shape = getmodel(model_name)   # image_shape=(112,112) if ArcFace
+        device = next(model.parameters()).device
+        print("Model device:", device)
         mtcnn = align # 我目前使用的与ArcFace配套的MTCNN模型，输入(H,W,C)numpy.array, 输出人脸部分的(H,W,C)numpy_.rray
     elif model_name == 'Facenet':
         model = InceptionResnetV1(pretrained='vggface2').eval().to(device) # vggface2 casia-webface
@@ -763,11 +884,11 @@ def main():
 
     if dataset_name == 'LFW':
         if model_name == 'ArcFace': 
-            base_data_root = 'E:/Files/code/Dataset_Face/lfw-112-112'
+            base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-aligned'
         elif model_name == 'CosFace' or model_name == 'SphereFace':
-            base_data_root = 'E:/Files/code/Dataset_Face/lfw-112-96'
-        # adv_dataset_root = 'E:/Files/code/Dataset_Face/adv_face/align'
-        adv_dataset_root = 'E:/Files/code/Dataset_Face/adv_face/tmp'
+            base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-aligned'
+        # adv_dataset_root = '/mnt/md0/beck/datasets/lfw/adv_faces'
+        adv_dataset_root = '/mnt/md0/beck/datasets/lfw/adv_faces'
         run = run_lfw
         targets_dir = ''
         if targeted:
@@ -790,7 +911,7 @@ def main():
         # adv_dataset_root = 'E:/Files/code/Dataset_Face/adv_face/align'
         adv_dataset_root = 'E:/Files/code/Dataset_Face/adv_face'
         run = run_normal
-        targets_dir = 'E:/Files/code/Dataset_Face/lfw-sample/single-targets-celeba'
+        targets_dir = '/mnt/md0/beck/datasets/lfw'
     
     elif dataset_name == 'celebahq-all':
         if model_name == 'ArcFace': 
@@ -810,9 +931,16 @@ def main():
         run = run_normal
         targets_dir = 'E:/Files/code/Dataset_Face/lfw-sample/single-targets'
 
-    if args.server:
-        model = nn.DataParallel(model)
 
+    if args.server and torch.cuda.device_count() > 1:
+        if isinstance(model, nn.DataParallel):
+            print(f"Model already wrapped in DataParallel (internal). Using {torch.cuda.device_count()} GPUs.")
+        else:
+            model = nn.DataParallel(model)
+            print(f"Using DataParallel on {torch.cuda.device_count()} GPUs")
+    else:
+        print("Using single GPU (no DataParallel)")
+    
     time0 = time.time()
 
     for atk_method in attack_list:
@@ -821,7 +949,15 @@ def main():
                 for steps in Steps:
                     params = {'eps':ep, 'alpha':alpha, 'steps':steps, 'gamma':gamma[0]}
                     time1 = time.time()
-                    run(model_name, atk_method, dataset_name, num_total, num, batch_size, base_data_root, people_adv_txt, model, img_shape, mtcnn, params, save_img, adv_dataset_root, targets_dir, save_noise)
+                    print(f"Starting attack {atk_method} eps={ep} alpha={alpha} steps={steps}")
+                    if file_list:
+                        run_lfw_from_list(model_name, atk_method, dataset_name, batch_size, base_data_root, file_list, model, img_shape, params, save_img, adv_dataset_root, targets_dir, save_noise)
+                    else:   
+                        if run is run_lfw:
+                            run(model_name, atk_method, dataset_name, num_total, num, batch_size, base_data_root, people_adv_txt, model, img_shape, mtcnn, params, save_img, adv_dataset_root, targets_dir, save_noise)
+                        else:
+                            run(model_name, atk_method, dataset_name, batch_size, base_data_root, model, img_shape, params, save_img, adv_dataset_root, targets_dir, save_noise)
+                    print(f"Finished attack {atk_method} eps={ep} alpha={alpha} steps={steps}")
                     # run_normal(model_name, atk_method, dataset_name, batch_size, base_data_root, model, img_shape, params, save_img, adv_dataset_root, targets_dir, save_noise)
 
                     time2 = time.time()
@@ -871,11 +1007,11 @@ def tmp():
 
     if dataset_name == 'LFW':
         if model_name == 'ArcFace': 
-            base_data_root = 'E:/Files/code/Dataset_Face/lfw-112-112'
+            base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-aligned'
         elif model_name == 'CosFace' or model_name == 'SphereFace':
-            base_data_root = 'E:/Files/code/Dataset_Face/lfw-112-96'
+            base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-aligned'
         # adv_dataset_root = 'E:/Files/code/Dataset_Face/adv_face/align'
-        adv_dataset_root = 'E:/Files/code/Dataset_Face/adv_face/align'
+        adv_dataset_root = '/mnt/md0/beck/datasets/lfw/adv_faces/'
         # run = run_lfw
         targets_dir = 'E:/Files/code/Dataset_Face/CelebA-HQ-112-112/celebahq-112-112'
         # if targeted:
