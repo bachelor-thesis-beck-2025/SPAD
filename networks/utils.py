@@ -53,7 +53,10 @@ def get_network(network_config):
             net = torch.nn.parallel.DistributedDataParallel(
                 net.cuda(),
                 device_ids=[comm.get_local_rank()],
-                broadcast_buffers=True)
+                broadcast_buffers=True,
+                find_unused_parameters=True,  # allow parameters to be unused this step
+                static_graph=False
+            )
 
     if network_config.num_gpus > 0:
         if type(net) is dict:

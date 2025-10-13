@@ -37,15 +37,28 @@ class Train_SP_Pipeline:
 
             print('Start training...', flush=True)
         
+        if not comm.is_main_process():
+            # Ensure recorder is defined for non-main processes
+            recorder = None
+
+
         batch_idx = 0
         for epoch_idx in range(1, self.config.optimizer.num_epochs + 1):
             nets, train_metrics, batch_idx = trainer.train_epoch(epoch_idx, batch_idx, evaluator, postprocessor, recorder)
 
             comm.synchronize()
             if comm.is_main_process():
+                # Evaluate on validation set
+                val_metrics = evaluator.eval_acc_SP(nets, loader_dict['test'], postprocessor, epoch_idx, batch_idx)
+                
                 # save model and report the result
-                recorder.save_model(nets, train_metrics)
-                recorder.report(train_metrics)
+                
+                recorder.save_model(nets, val_metrics)
+                recorder.report(train_metrics, val_metrics)
+                
+                # original pipeline
+                # recorder.save_model(nets, train_metrics)
+                # recorder.report(train_metrics)
 
         if comm.is_main_process():
             recorder.summary()

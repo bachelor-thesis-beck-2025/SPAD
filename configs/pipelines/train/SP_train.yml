@@ -5,7 +5,7 @@ force_merge: True # disabled if 'save_output' is False
 num_classes: '@{dataset.num_classes}'
 mark: m0
 
-num_gpus: 1
+num_gpus: 4
 num_workers: 8
 num_machines: 1
 machine_rank: 0
@@ -56,7 +56,7 @@ postprocessor:
 network:
   name: X_sep
   num_classes: '@{dataset.num_classes}'
-  pretrained: False          # set 'True' to load pretrained model
+  pretrained: True          # set 'True' to load pretrained model
   checkpoint: './networks/xception-b5690688.pth'            # ignore if pretrained is false
   num_gpus: '@{num_gpus}'
 

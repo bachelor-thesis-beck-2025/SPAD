@@ -10,7 +10,7 @@ dataset:
   mode: SP
   train:
     dataset_class: ImglistDataset_SP
-    data_dir: 
+    data_dir: ""
     imglist_pth: ./data/SP_new3/LFW_train.labels.txt
     batch_size: 32
     shuffle: True
@@ -27,7 +27,7 @@ dataset:
       data_dir: 
       imglist_pth: ./data/SP_new3/LFW_test.labels.txt
     Gradient-advs:
-      subsets: [fgsm, bim, pgd, rfgsm, difgsm, mifgsm, tifgsm, tipim]
+      subsets: [fgsm, bim, pgd, rfgsm, difgsm, mifgsm, tifgsm]
       fgsm:
         data_dir: 
         imglist_pth: ./data/SP_new3/LFW-FGSM-eps5_test.labels.txt
@@ -49,9 +49,20 @@ dataset:
       tifgsm:
         data_dir: 
         imglist_pth: ./data/SP_new3/LFW-TIFGSM-eps5_test.labels.txt
-      tipim:
-        data_dir: 
-        imglist_pth: ./data/SP_new3/LFW-TIPIM-eps5_test.labels.txt
-
-
+      ffgsm:
+        data_dir:
+        imglist_pth: ./data/SP_new3/LFW-FFGSM-eps5-alpha1_test.labels.txt
+      tpgd:
+        data_dir:
+        imglist_pth: ./data/SP_new3/LFW-TPGD-eps5-alpha1-steps10_test.labels.txt
+      pgdl2:
+        data_dir:
+        imglist_pth: ./data/SP_new3/LFW-PGDL2-eps5-alpha1-eps_for_division1e-10_test.labels.txt
+      eotpgd:
+        data_dir:
+        imglist_pth: ./data/SP_new3/LFW-EOTPGD-eps5-alpha1_test.labels.txt
+      gn:
+        data_dir:
+        imglist_pth: ./data/SP_new3/LFW-GN-std0.1_test.labels.txt
+      
 

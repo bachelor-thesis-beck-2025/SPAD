@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from utils import Config
 import utils.comm as comm
@@ -106,7 +107,9 @@ class SPTrainer: # only on real
 
                     energy_score_for_fg = self.log_sum_exp(logit, dim=1) 
 
-                    predictions_ood = self.net.fc(ood_samples)
+                    # new
+                    backbone = self.net.module if isinstance(self.net, DDP) else self.net
+                    predictions_ood = backbone.fc(ood_samples)
 
                     energy_score_for_bg = self.log_sum_exp(predictions_ood, dim=1)
 
