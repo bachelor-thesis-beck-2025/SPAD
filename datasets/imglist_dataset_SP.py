@@ -98,21 +98,30 @@ class ImglistDataset_SP(BaseDataset):
         image_name, extra_str = tokens[0], tokens[1]
         # print('image_name',image_name)
         # print('extra_str',extra_str)
-        if self.data_dir != '' and image_name.startswith('/'):
-            raise RuntimeError('image_name starts with "/"')
-        if self.data_dir == None:
+        image_name = image_name.strip().replace('\\', '/')
+        # Build path: allow absolute paths, otherwise join with data_dir if provided
+        is_abs = os.path.isabs(image_name)
+        if is_abs:
             path = image_name
         else:
-            path = os.path.join(self.data_dir, image_name)
+            if self.data_dir is None or self.data_dir == '':
+                path = image_name
+            else:
+                path = os.path.join(self.data_dir, image_name)
+        path = os.path.normpath(path)
 
         sample = dict()
         sample['image_name'] = image_name
 
-        # TODO: comments
+        
         kwargs = {'name': self.name, 'path': path, 'tokens': tokens}
         self.preprocessor.setup(**kwargs)
         try:
+            if not os.path.exists(path):
+                raise FileNotFoundError('Image not found: {}'.format(path))
             img = cv2.imread(path)
+            if img is None:
+                raise IOError('cv2.imread failed to load image: {}'.format(path))
             # img = cv2.resize(img, (256, 256))
             if np.random.random() <= self.rap:
                 # img, _ = self.SP_process(img, mode=self.mode)

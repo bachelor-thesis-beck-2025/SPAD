@@ -68,12 +68,17 @@ class ImglistDataset(BaseDataset):
         image_name, extra_str = tokens[0], tokens[1]
         # print('image_name',image_name)
         # print('extra_str',extra_str)
-        if self.data_dir != '' and image_name.startswith('/'):
-            raise RuntimeError('image_name starts with "/"')
-        if self.data_dir == None:
+        image_name = image_name.strip().replace('\\', '/')
+        # Build path: allow absolute paths, otherwise join with data_dir if provided
+        is_abs = os.path.isabs(image_name)
+        if is_abs:
             path = image_name
         else:
-            path = os.path.join(self.data_dir, image_name)
+            if self.data_dir is None or self.data_dir == '':
+                path = image_name
+            else:
+                path = os.path.join(self.data_dir, image_name)
+        path = os.path.normpath(path)
 
         # change dir
         # if path.startswith('E:'):
@@ -84,7 +89,7 @@ class ImglistDataset(BaseDataset):
         sample = dict()
         sample['image_name'] = image_name
 
-        # TODO: comments
+        
         kwargs = {'name': self.name, 'path': path, 'tokens': tokens}
         self.preprocessor.setup(**kwargs)
         try:
