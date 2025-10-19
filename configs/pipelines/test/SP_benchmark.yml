@@ -1,0 +1,45 @@
+exp_name: "'@{pipeline.name}'_'@{network.name}'_benchmark_@{mark}"
+output_dir: ./results/
+save_output: True
+force_merge: True
+num_classes: 2
+mark: SP
+
+num_gpus: 1
+num_workers: 4
+num_machines: 1
+machine_rank: 0
+epoch: 1
+
+seed: 3407
+
+pipeline:
+  name: SP_benchmark
+
+preprocessor:
+  name: base
+
+postprocessor:
+  name: SP
+  mode: energy
+  postprocessor_args:
+    temperature: 1
+
+network:
+  name: X_sep
+  num_classes: 2
+  pretrained: True
+  checkpoint: ''
+  num_gpus: '@{num_gpus}'
+
+dataset:
+  name: SP_BENCH
+  image_size: 480
+  pre_size: 112
+  interpolation: bilinear
+  num_workers: '@{num_workers}'
+  folder: /mnt/md0/beck/datasets/benchmarks/faceforensics_benchmark_images
+  batch_size: 50
+
+
+

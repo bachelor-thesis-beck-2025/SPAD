@@ -25,18 +25,29 @@ def get_network(network_config):
             for subnet, checkpoint in zip(net.values(), network_config.checkpoint):
                 if checkpoint is not None:
                     if checkpoint != 'none':
-                        subnet.load_state_dict(torch.load(checkpoint),
-                                               strict=False)
+                        loaded_checkpoint = torch.load(checkpoint, weights_only=False)
+                        # Handle case where checkpoint contains the full model object
+                        if hasattr(loaded_checkpoint, 'state_dict'):
+                            loaded_checkpoint = loaded_checkpoint.state_dict()
+                        subnet.load_state_dict(loaded_checkpoint, strict=False)
+                        
         elif network_config.name == 'bit' and not network_config.normal_load:
             net.load_from(np.load(network_config.checkpoint))
         elif network_config.name == 'vit':
             pass
         else:
             try:
-                net.load_state_dict(torch.load(network_config.checkpoint), strict=False)
+                loaded_checkpoint = torch.load(network_config.checkpoint, weights_only=False)
+                # Handle case where checkpoint contains the full model object
+                if hasattr(loaded_checkpoint, 'state_dict'):
+                    loaded_checkpoint = loaded_checkpoint.state_dict()
+                net.load_state_dict(loaded_checkpoint, strict=False)
             except RuntimeError:
                 # sometimes fc should not be loaded
-                loaded_pth = torch.load(network_config.checkpoint)
+                loaded_pth = torch.load(network_config.checkpoint, weights_only=False)
+                # Handle case where checkpoint contains the full model object
+                if hasattr(loaded_pth, 'state_dict'):
+                    loaded_pth = loaded_pth.state_dict()
                 loaded_pth.pop('fc.weight')
                 loaded_pth.pop('fc.bias')
                 net.load_state_dict(loaded_pth, strict=False)

@@ -606,7 +606,7 @@ class TransferModel(nn.Module):
                     model.fc = model.last_linear
                     del model.last_linear
                     state_dict = torch.load(
-                        PRETAINED_WEIGHT_PATH)
+                        PRETAINED_WEIGHT_PATH, weights_only=False)
                     for name, weights in state_dict.items():
                         if 'pointwise' in name:
                             state_dict[name] = weights.unsqueeze(

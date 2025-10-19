@@ -22,7 +22,12 @@ class TestStandardPreProcessor(BasePreprocessor):
         try:
             interpolation = config.dataset[split].interpolation
         except KeyError:
-            interpolation = config.ood_dataset.interpolation
+            # fall back to dataset-level interpolation or default to bilinear
+            try:
+                interpolation = config.ood_dataset.interpolation
+            except KeyError:
+                interpolation = 'bilinear'
+
 
         interpolation = interpolation_modes[interpolation]
 
