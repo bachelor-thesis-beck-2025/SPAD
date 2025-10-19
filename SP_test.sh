@@ -4,6 +4,6 @@
 PYTHONPATH='.':$PYTHONPATH \
 python main.py \
 --config configs/datasets/SP_LFW.yml \
-configs/pipelines/test/SPtest.yml \
+configs/pipelines/test/SP_test.yml \
 --num_workers 8 \
---network.checkpoint 'results/xception_net_sep_SP_e50_lr0.1_SP/net-model_epoch4.ckpt' 
+--network.checkpoint 'results/X_sep_SP_SP_LFW_e5_lr0.0002_wd5e-06_m0/net-best_epoch4_batch316acc0.9903.ckpt' 
