@@ -65,12 +65,17 @@ class ImglistDataset(BaseDataset):
         # print(line)
         tokens = line.split('\t', 1)
         # print(tokens)
+
+        if len(tokens) < 2:
+            raise ValueError(f"Skipping malformed line at index {index}")
+
         image_name, extra_str = tokens[0], tokens[1]
         # print('image_name',image_name)
         # print('extra_str',extra_str)
         image_name = image_name.strip().replace('\\', '/')
         # Build path: allow absolute paths, otherwise join with data_dir if provided
         is_abs = os.path.isabs(image_name)
+
         if is_abs:
             path = image_name
         else:
@@ -92,6 +97,7 @@ class ImglistDataset(BaseDataset):
         
         kwargs = {'name': self.name, 'path': path, 'tokens': tokens}
         self.preprocessor.setup(**kwargs)
+
         try:
             if not self.dummy_read:
                 with open(path, 'rb') as f:
@@ -121,7 +127,8 @@ class ImglistDataset(BaseDataset):
                 soft_label[sample['label']] = 1
             sample['soft_label'] = soft_label
 
+            return sample
+
         except Exception as e:
             logging.error('[{}] broken'.format(path))
             raise e
-        return sample

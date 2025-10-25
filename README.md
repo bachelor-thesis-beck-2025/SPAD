@@ -1,51 +1,39 @@
-## Code for paper ["Detecting Adversarial Faces Using Only Real Face Self-Perturbations"](https://arxiv.org/abs/2304.11359). 
+# Fork implementation of 'Detecting Adversarial Faces Using Only Real Face Self-Perturbations' for thesis
 
-## Get Started
 
-Datasets are LFW and CelebA-HQ.
+### Generate adversarial faces
 
-Our codebase accesses the datasets from `./data/` and checkpoints from `./results/checkpoints/` by default.
+Provide original image dataset.
+Use conda environment 'adv' and run with only one GPU, since otherwise a deadlock occurs.
 ```
-├── ...
-├── data
-│   └── SP_new3
-├── results
-│   └──checkpoints
-├── main.py
-├── ...
+CUDA_VISIBLE_DEVICES=0 CUDA_LAUNCH_BLOCKING=1 python -m make_adv --file_list /path/to/list.txt --server False --batch_size 16 --dataset LFW
 ```
 
 ### Train Detector
+
+Donwload model checkpoint and place in results/checkpoints folder. Do the same for pretrained XceptionNet checkpoint.
+Add path to checkpoint in SP_train.sh or in configs/pipelines/test/SP_train.yml.
+```
 sh SP_train.sh
+```
 
 ### Test
+
+Use conda 'base' environment.
+Add paths to adversarial faces and specify which attacks to test in configs/datasets/SP_LFW.yml.
+
+```
 sh SP_test.sh
+```
+
 
 ```
 ## Dependencies
 python 3.8.8, PyTorch = 1.10.0, cudatoolkit = 11.7, torchvision, tqdm, scikit-learn, mmcv, numpy, opencv-python, dlib, Pillow
 ```
 
-### Datasets
 
-LFW and Celeba-HQ datasets we used in this program are [here](https://pan.baidu.com/s/1mWNC4NkJrVkMWWwTxdTb2A?pwd=koof). The generated adv-faces are also provided. You could generate adv-faces by torchattack. The attack code is in attack_utils.
-
-### Checkpoints
-
-We provide some checkpoints for you to test. You can download them [here](https://pan.baidu.com/s/1cDnb8CFzihI3dbvUsheq2g?pwd=jmao). You can put them into the folder './results/checkpoints'.
-
-To Test gradient-based adv-faces on LFW, run:
-```
-python main.py --config configs/datasets/SP_LFW.yml configs/pipelines/test/SP_test.yml --network.name X --network.checkpoint 'results/checkpoints/net-best_LFW.ckpt'
-```
-To Test gradient-based adv-faces on CelebA-HQ, run:
-```
-python main.py --config configs/datasets/SP_celebahq.yml configs/pipelines/test/SP_test.yml --network.name X --network.checkpoint 'results/checkpoints/net-best_celebahq.ckpt'
-```
-To Test GAN-based adv-faces on CelebA-HQ, run:
-```
-python main.py --config configs/datasets/GC_CA.yml configs/pipelines/test/SP_test.yml --network.name X_sep --network.checkpoint 'results/checkpoints/net-best_GC.ckpt'
-```
+From the original repository:
 
 ### Citation
 

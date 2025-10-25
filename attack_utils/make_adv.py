@@ -88,8 +88,8 @@ def get_atk_method(atk_method, model, params):
         atk = torchattacks.DIFGSM_face(model, eps=eps, alpha=alpha, steps=steps)
     elif atk_method == 'TIFGSM':
         atk = torchattacks.TIFGSM_face(model, eps=eps, alpha=alpha, steps=steps)
-    # elif atk_method == 'TIPIM': # targeted only
-    #     atk = torchattacks.TIPIM_face(model, eps = eps, gamma = gamma, steps = steps, norm = 'l2', gain = 'gain3')
+    elif atk_method == 'TIPIM': # targeted only
+        atk = torchattacks.TIPIM_face(model, eps = eps, gamma = gamma, steps = steps, norm = 'l2', gain = 'gain3')
     else:
         raise Exception
     return atk
@@ -738,8 +738,8 @@ def align_faces():
 
     print('Align faces')
 
-    base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-SPAD'
-    dataset_root = '/mnt/md0/beck/datasets/lfw/lfw-aligned'
+    base_data_root = '/mnt/md0/beck/datasets/lfw/lfw-deepfunneled/lfw-deepfunneled'
+    dataset_root = '/mnt/md0/beck/datasets/lfw/aligned'
     batch_size = 100
     img_shape = (112, 112)
     mtcnn = MTCNN(image_size=img_shape[0])
@@ -834,7 +834,7 @@ def input_args():
                         help="calculate attack success rate or not")
     parser.add_argument("--save_noise", type=bool, default=False,
                         help="save noise mask")
-    parser.add_argument("--attack_list", type=str, default=['GN'],  # ['FGSM','BIM','PGD','RFGSM','MIFGSM','DIFGSM','TIFGSM','FFGSM'],
+    parser.add_argument("--attack_list", type=str, default=['TIPIM'],  # ['FGSM','BIM','PGD','RFGSM','MIFGSM','DIFGSM','TIFGSM','FFGSM'],
                         help="attack algorithm(s)")
     parser.add_argument("--file_list", type=str, default='',
                         help="Text file with image paths relative to base_data_root")
@@ -1058,6 +1058,6 @@ def tmp():
     
 
 if __name__=='__main__':
-    main()
+    # main()
     # tmp()
-    # align_faces()
+    align_faces()

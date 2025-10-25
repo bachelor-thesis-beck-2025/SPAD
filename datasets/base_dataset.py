@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 
 
 class BaseDataset(Dataset):
-    def __init__(self, pseudo_index=-1, skip_broken=False, new_index='next'):
+    def __init__(self, pseudo_index=-1, skip_broken=True, new_index='next'):
         super(BaseDataset, self).__init__()
         self.pseudo_index = -1
         self.skip_broken = skip_broken
